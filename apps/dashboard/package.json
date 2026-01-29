@@ -1,0 +1,41 @@
+{
+  "name": "@auratechit/dashboard",
+  "version": "1.0.0",
+  "description": "Main dashboard for AuraTechIT SaaS Platform",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@auratechit/types": "^1.0.0",
+    "@auratechit/ui": "^1.0.0",
+    "@hookform/resolvers": "^3.3.2",
+    "@types/jwt-decode": "^2.2.1",
+    "clsx": "^2.0.0",
+    "date-fns": "^2.30.0",
+    "framer-motion": "^10.16.16",
+    "jwt-decode": "^4.0.0",
+    "lucide-react": "^0.294.0",
+    "next": "14.0.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.48.2",
+    "recharts": "^2.8.0",
+    "tailwind-merge": "^2.0.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.10",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.0.3",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.2.2"
+  }
+}

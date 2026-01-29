@@ -1,0 +1,357 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  firstName         String
+  lastName          String
+  avatar            String?
+  emailVerified     Boolean  @default(false)
+  twoFactorEnabled  Boolean  @default(false)
+  twoFactorSecret   String?
+  passwordHash      String?
+  lastLoginAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  authProviders AuthProvider[]
+  userRoles     UserRole[]
+  ownedOrganizations Organization[] @relation("OrganizationOwner")
+  notifications  Notification[]
+  analyticsEvents AnalyticsEvent[]
+  createdInvoices   Invoice[] @relation("InvoiceCreator")
+  invitationsSent   UserRole[] @relation("InvitationSender")
+
+  @@map("users")
+}
+
+model AuthProvider {
+  id         String   @id @default(cuid())
+  name       String   // 'google', 'github', 'email'
+  providerId String   // Provider's user ID
+  userId     String
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([name, providerId])
+  @@map("auth_providers")
+}
+
+// Organization Management
+model Organization {
+  id      String  @id @default(cuid())
+  name    String
+  slug    String  @unique
+  logo    String?
+  domain  String?
+  type    String  // 'business', 'enterprise', 'agency'
+  plan    String  @default("free") // Reference to subscription plan
+  status  String  @default("active") // 'active', 'suspended', 'cancelled'
+  ownerId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  owner         User              @relation("OrganizationOwner", fields: [ownerId], references: [id])
+  userRoles     UserRole[]
+  subscriptions Subscription[]
+  invoices      Invoice[]
+  organizationApps OrganizationApp[]
+  analyticsEvents AnalyticsEvent[]
+  notifications  Notification[]
+  integrations   Integration[]
+  roles         Role[]
+  usageMetrics  UsageMetrics[]
+
+  @@map("organizations")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  isSystem    Boolean  @default(false)
+  organizationId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  RolePermission[]
+  userRoles    UserRole[]
+
+  @@unique([name, organizationId])
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @default(cuid())
+  name        String @unique
+  resource    String
+  action      String
+  description String
+
+  // Relations
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(cuid())
+  roleId       String
+  permissionId String
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id         String    @id @default(cuid())
+  userId     String
+  organizationId String
+  roleId     String
+  invitedBy  String?
+  joinedAt   DateTime  @default(now())
+  status     String    @default("active") // 'active', 'invited', 'suspended'
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+  inviter      User?        @relation("InvitationSender", fields: [invitedBy], references: [id])
+
+  @@unique([userId, organizationId])
+  @@map("user_roles")
+}
+
+// Subscription & Billing
+model SubscriptionPlan {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  price       Decimal
+  currency    String   @default("USD")
+  interval    String   // 'month', 'year'
+  features    Json     // Array of feature objects
+  apps        String[] // Array of app IDs
+  stripePriceId String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  organizationId       String
+  planId               String
+  status               String    // 'trialing', 'active', 'past_due', 'canceled', 'unpaid'
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  trialEnd             DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  stripeSubscriptionId String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         SubscriptionPlan @relation(fields: [planId], references: [id])
+  invoices     Invoice[]
+
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id               String    @id @default(cuid())
+  organizationId   String
+  subscriptionId   String
+  stripeInvoiceId  String?
+  amount           Decimal
+  currency         String    @default("USD")
+  status           String    // 'draft', 'open', 'paid', 'void', 'uncollectible'
+  dueDate          DateTime
+  paidAt           DateTime?
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+  creator     User?        @relation("InvoiceCreator", fields: [createdById], references: [id])
+
+  @@map("invoices")
+}
+
+// App Marketplace
+model App {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  description       String
+  shortDescription  String
+  logo              String
+  screenshots       String[] // Array of URLs
+  version           String
+  category          String   // 'crm', 'erp', 'pos', etc.
+  tags              String[] // Array of tags
+  features          String[] // Array of features
+  pricing           Json     // Pricing object
+  dependencies      String[] // Array of app IDs
+  developer         String
+  website           String?
+  documentation     String?
+  isActive          Boolean  @default(true)
+  isPublic          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  organizationApps OrganizationApp[]
+
+  @@map("apps")
+}
+
+model OrganizationApp {
+  id             String    @id @default(cuid())
+  organizationId String
+  appId          String
+  status         String    @default("inactive") // 'active', 'inactive', 'suspended'
+  settings       Json      // App-specific settings
+  enabledAt      DateTime?
+  disabledAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  app          App          @relation(fields: [appId], references: [id])
+
+  @@unique([organizationId, appId])
+  @@map("organization_apps")
+}
+
+// Notifications
+model Notification {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String?
+  type           String    // 'system', 'billing', 'app_update', etc.
+  title          String
+  message        String
+  data           Json?     // Additional data
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// Analytics
+model AnalyticsEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  event          String
+  properties     Json     // Event properties
+  timestamp      DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@map("analytics_events")
+}
+
+model UsageMetrics {
+  id             String   @id @default(cuid())
+  organizationId String
+  integrationId  String?
+  period         String   // 'daily', 'weekly', 'monthly'
+  activeUsers    Int
+  apiCalls       Int
+  storageUsed    BigInt
+  appUsage       Json     // App-specific usage metrics
+  timestamp      DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration  Integration? @relation(fields: [integrationId], references: [id])
+
+  @@unique([organizationId, period, timestamp])
+  @@map("usage_metrics")
+}
+
+// Integrations
+model Integration {
+  id             String   @id @default(cuid())
+  name           String
+  type           String   // 'stripe', 'google_workspace', 'slack', etc.
+  config         Json     // Integration-specific config
+  status         String   @default("disconnected") // 'connected', 'disconnected', 'error'
+  lastSync       DateTime?
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  usageMetrics  UsageMetrics[]
+
+  @@map("integrations")
+}
+
+// System Configuration
+model SystemConfig {
+  id    String @id @default(cuid())
+  key   String @unique
+  value Json
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
+}
+
+// Audit Logs
+model AuditLog {
+  id             String   @id @default(cuid())
+  userId         String?
+  organizationId String?
+  action         String
+  resource       String
+  resourceId     String?
+  oldValues      Json?
+  newValues      Json?
+  ipAddress      String?
+  userAgent      String?
+  timestamp      DateTime @default(now())
+
+  @@map("audit_logs")
+}

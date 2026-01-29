@@ -1,0 +1,33 @@
+{
+  "name": "auratechit-saas-platform",
+  "version": "1.0.0",
+  "description": "All-in-One SaaS Platform by AuraTechIT",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "db:migrate": "cd services/api && npm run db:migrate",
+    "db:seed": "cd services/api && npm run db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^1.13.3",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

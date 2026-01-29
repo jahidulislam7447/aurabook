@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: auratechit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: auratechit
+      POSTGRES_USER: auratechit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-auratechit123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - auratechit-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: auratechit-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - auratechit-network
+
+  # API Service
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: auratechit-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://auratechit:${POSTGRES_PASSWORD:-auratechit123}@postgres:5432/auratechit
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+    volumes:
+      - ./logs:/app/logs
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - auratechit-network
+
+  # Marketing Website
+  marketing-site:
+    build:
+      context: .
+      dockerfile: apps/marketing-site/Dockerfile
+    container_name: auratechit-marketing
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - auratechit-network
+
+  # Admin Panel
+  admin-panel:
+    build:
+      context: .
+      dockerfile: apps/admin-panel/Dockerfile
+    container_name: auratechit-admin
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    ports:
+      - "3002:3002"
+    depends_on:
+      - api
+    networks:
+      - auratechit-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: auratechit-nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - marketing-site
+      - admin-panel
+      - api
+    networks:
+      - auratechit-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  auratechit-network:
+    driver: bridge
